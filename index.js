@@ -3,7 +3,10 @@ const cors = require("cors");
 const express = require("express");
 const connectDB = require("./connectDB");
 const Event = require("./models/Events");
+const User = require("./models/Users");
 const multer = require("multer");
+const cookieParser = require("cookie-parser");
+const generateToken = require("./generateToken");
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -11,8 +14,10 @@ const PORT = process.env.PORT || 8000;
 connectDB();
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
+app.use("/uploadProfil", express.static("uploadProfil"));
 
 // Get All Events
 
@@ -96,7 +101,7 @@ app.post("/api/events", upload.single("thumbnail"), async (req, res) => {
 });
 
 // Update A Book
-app.put("/api/events",upload.single("thumbnail"), async (req, res) => {
+app.put("/api/events", upload.single("thumbnail"), async (req, res) => {
   try {
     const eventId = req.body.eventId;
 
@@ -139,7 +144,104 @@ app.delete("/api/events/:_id/:code", async (req, res) => {
   }
 });
 
-//DONTKNOW
+// *********************** USER LOGIN AND LOGOUT  ****************************
+
+// Get All Events
+
+app.get("/api/auth/users", async (req, res) => {
+  try {
+    const filter = {};
+    const data = await User.find(filter);
+    if (!data) {
+      throw new Error("An error occurred while fetching events.");
+    }
+    res.status(201).json(data);
+  } catch {
+    res.status(500).json({ error: "An error occurred while fetching events." });
+  }
+});
+
+// LOGIN USER
+
+app.get("/api/auth/users/:email", async (req, res) => {
+  try {
+    const emailParam = req.params.email;
+    const data = await User.findOne({ email: emailParam });
+    if (!data) {
+      throw new Error("An error occurred while fetching events.");
+    }
+    res.status(201).json(data);
+  } catch {
+    res.status(500).json({ error: "An error occurred while fetching events." });
+  }
+});
+
+// CREATE USER
+
+const storageProfil = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploadProfil/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
+  },
+});
+
+const uploadProfil = multer({ storage: storageProfil });
+
+app.post(
+  "/api/auth/users",
+  uploadProfil.single("profilImage"),
+  async (req, res) => {
+    try {
+      const email = req.body.email
+
+      const userExists = await User.findOne({ email });
+
+      if (userExists) {
+        res.status(400);
+        throw new Error("User already exists");
+      }else {
+      const newUser = new User({
+        nom: req.body.nom,
+        prenom: req.body.prenom,
+        pays: req.body.pays,
+        ville: req.body.ville,
+        telephone: req.body.telephone,
+        email: req.body.email,
+        mdp: req.body.mdp,
+        profilImage: req.file.filename,
+      });
+      const userCreated = await User.create(newUser);
+      if (userCreated) {
+        generateToken(res, userCreated._id);
+
+        res.status(201).json({
+          _id: userCreated._id,
+          nom: userCreated.nom,
+          prenom: userCreated.prenom,
+          pays: userCreated.pays,
+          ville: userCreated.ville,
+          telephone: userCreated.telephone,
+          email: userCreated.email,
+          mdp: userCreated.mdp,
+          profilImage: userCreated.profilImage,
+        });
+        console.log("eumm blsksjfku")
+      } else {
+        res.status(400);
+        throw new Error("Invalid user data");
+      }
+    }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+);
+
+//DONTKNOW   WHY DO YOU HAVE TO BE LAST ???????????
+
 app.get("/", (req, res) => {
   res.json("Hello mate!");
 });
